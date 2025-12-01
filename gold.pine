@@ -1,5 +1,5 @@
 //@version=5
-indicator("Gold Opening Range with sqrt", overlay=true)
+indicator("Gold label by @imriazul", overlay=true)
 
 // Time and Symbol Checks
 dhakaHour = hour(time, "Asia/Dhaka")
