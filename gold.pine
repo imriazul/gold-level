@@ -41,5 +41,5 @@ if isGoldChart and is600amBST and timeframe.period == "5"
     // Create Drawing Objects (Box and Lines)
     myBox := box.new(bar_index, rangUp, bar_index + 24, rangDown, border_color=color.rgb(0, 128, 255), bgcolor=color.new(#ff9900, 100))
     midLine := line.new(startBarIndex, midPrice, endBarIndex, midPrice, xloc=xloc.bar_index, extend=extend.none, color=color.rgb(0, 128, 255), width=1)
-    line37_5 := line.new(startBarIndex, level37_5, endBarIndex, level37_5, xloc=xloc.bar_index, extend=extend.none, color=color.new(color.rgb(0, 128, 255), 40), width=1)
-    line62_5 := line.new(startBarIndex, level62_5, endBarIndex, level62_5, xloc=xloc.bar_index, extend=extend.none, color=color.new(color.rgb(0, 128, 255), 40), width=1)
+    line37_5 := line.new(startBarIndex, level37_5, endBarIndex, level37_5, xloc=xloc.bar_index, extend=extend.none, color=color.new(#ff042a, 5), width=1)
+    line62_5 := line.new(startBarIndex, level62_5, endBarIndex, level62_5, xloc=xloc.bar_index, extend=extend.none, color=color.new(#0d821a, 8), width=1)
