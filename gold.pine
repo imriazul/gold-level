@@ -1,45 +1,56 @@
 //@version=5
 indicator("Gold label by @imriazul", overlay=true)
 
-// Time and Symbol Checks
-dhakaHour = hour(time, "Asia/Dhaka")
+//==================== SETTINGS ====================
+useDST = input.bool(true, "DST", tooltip="Daylight Saving Time ON/OFF")
+
+//==================== TIME & SYMBOL CHECKS ====================
+dhakaHour   = hour(time, "Asia/Dhaka")
 dhakaMinute = minute(time, "Asia/Dhaka")
-is600amBST = (dhakaHour == 6 and dhakaMinute == 0)
+
+targetHour  = useDST ? 6 : 7
+isTargetTime = (dhakaHour == targetHour and dhakaMinute == 0)
+
 isGoldChart = syminfo.ticker == "XAUUSD" or syminfo.ticker == "GOLD" or str.contains(syminfo.ticker, "XAU")
 
-// EMAs
+//==================== EMAs ====================
 ema9  = ta.ema(close, 9)
 ema15 = ta.ema(close, 15)
 plot(ema9, title="EMA 9", color=color.orange, linewidth=1)
 plot(ema15, title="EMA 15", color=color.blue, linewidth=1)
 
-// Range Calculation and Drawing variables
+//==================== RANGE + DRAWING VARS ====================
 var float openingValue = na
 var float rangUp = na
 var float rangDown = na
-var box myBox = na
-var line midLine = na
-var line line37_5 = na
-var line line62_5 = na
-var int startBarIndex = na
+var box   myBox = na
+var line  midLine = na
+var line  line37_5 = na
+var line  line62_5 = na
+var int   startBarIndex = na
 
-// Only execute the logic on the 5-minute chart at 6:00 AM BST on a gold symbol
-if isGoldChart and is600amBST and timeframe.period == "5"
+// Only execute on the 5-minute chart at target time on a gold symbol
+if isGoldChart and isTargetTime and timeframe.period == "5"
     startBarIndex := bar_index
-    openingValue := open
-    sqrtVal = math.sqrt(openingValue)
-    forUp = sqrtVal + 0.105
-    forDown = sqrtVal - 0.105
-    rangUp := forUp * forUp
+    openingValue  := open
+
+    sqrtVal  = math.sqrt(openingValue)
+    forUp    = sqrtVal + 0.105
+    forDown  = sqrtVal - 0.105
+    rangUp   := forUp * forUp
     rangDown := forDown * forDown
-    midPrice = (rangUp + rangDown) / 2.0
-    rangeDiff = rangUp - rangDown
-    level37_5 = rangDown + rangeDiff * 0.375
-    level62_5 = rangDown + rangeDiff * 0.625
+
+    midPrice   = (rangUp + rangDown) / 2.0
+    rangeDiff  = rangUp - rangDown
+    level37_5  = rangDown + rangeDiff * 0.375
+    level62_5  = rangDown + rangeDiff * 0.625
     endBarIndex = startBarIndex + 24
-    
+
     // Create Drawing Objects (Box and Lines)
-    myBox := box.new(bar_index, rangUp, bar_index + 24, rangDown, border_color=color.rgb(0, 128, 255), bgcolor=color.new(#ff9900, 100))
+    myBox   := box.new(startBarIndex, rangUp, endBarIndex, rangDown, border_color=color.rgb(0, 128, 255), bgcolor=color.new(#ff9900, 100))
+
     midLine := line.new(startBarIndex, midPrice, endBarIndex, midPrice, xloc=xloc.bar_index, extend=extend.none, color=color.rgb(0, 128, 255), width=1)
+
     line37_5 := line.new(startBarIndex, level37_5, endBarIndex, level37_5, xloc=xloc.bar_index, extend=extend.none, color=color.new(#ff042a, 5), width=1)
+
     line62_5 := line.new(startBarIndex, level62_5, endBarIndex, level62_5, xloc=xloc.bar_index, extend=extend.none, color=color.new(#0d821a, 8), width=1)
