@@ -1,0 +1,52 @@
+//@version=5
+indicator("Gold label by @imriazul", overlay=true)
+
+//==================== SETTINGS ====================
+useDST = input.bool(true, "DST", tooltip="Daylight Saving Time ON/OFF")
+
+//==================== TIME & SYMBOL CHECKS ====================
+dhakaHour   = hour(time, "Asia/Dhaka")
+dhakaMinute = minute(time, "Asia/Dhaka")
+
+targetHour  = useDST ? 6 : 7
+isTargetTime = (dhakaHour == targetHour and dhakaMinute == 0)
+
+isGoldChart = syminfo.ticker == "XAUUSD" or syminfo.ticker == "GOLD" or str.contains(syminfo.ticker, "XAU")
+
+//==================== EMAs ====================
+ema9  = ta.ema(close, 9)
+ema15 = ta.ema(close, 15)
+plot(ema9, title="EMA 9", color=color.orange, linewidth=1)
+plot(ema15, title="EMA 15", color=color.blue, linewidth=1)
+
+//==================== RANGE + DRAWING VARS ====================
+var float openingValue = na
+var float rangUp = na
+var float rangDown = na
+var box   myBox = na
+var box   innerBox = na
+var int   startBarIndex = na
+
+// Only execute on allowed TF at target time on a gold symbol
+isAllowedTF = (timeframe.period == "3" or timeframe.period == "5" or timeframe.period == "15" or timeframe.period == "30")
+
+if isGoldChart and isTargetTime and isAllowedTF
+    startBarIndex := bar_index
+    openingValue  := open
+
+    sqrtVal  = math.sqrt(openingValue)
+    forUp    = sqrtVal + 0.105
+    forDown  = sqrtVal - 0.105
+    rangUp   := forUp * forUp
+    rangDown := forDown * forDown
+
+    rangeDiff  = rangUp - rangDown
+    level37_5  = rangDown + rangeDiff * 0.375
+    level62_5  = rangDown + rangeDiff * 0.625
+    endBarIndex = startBarIndex + 24
+
+    // Big range box (same as before)
+    myBox := box.new( startBarIndex, rangUp, endBarIndex, rangDown,border_color=color.rgb(0, 128, 255), bgcolor=color.new(#ff9900, 100))
+
+    // Inner zone box (replaces the 3 lines)
+    innerBox := box.new(startBarIndex, level62_5, endBarIndex,   level37_5, border_color=color.new(#fe0c0c, 70), bgcolor=color.new(#fc7646, 85))
