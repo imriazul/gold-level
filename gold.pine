@@ -30,7 +30,7 @@ var line  line62_5 = na
 var int   startBarIndex = na
 
 // Only execute on the 5-minute chart at target time on a gold symbol
-if isGoldChart and isTargetTime and timeframe.period == "5"
+if isGoldChart and isTargetTime and (timeframe.period == "3" or timeframe.period == "5" or timeframe.period == "15" or timeframe.period == "30")
     startBarIndex := bar_index
     openingValue  := open
 
