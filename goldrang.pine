@@ -4,11 +4,17 @@ indicator("Gold label by @imriazul", overlay=true)
 //==================== SETTINGS ====================
 useDST = input.bool(true, "DST", tooltip="Daylight Saving Time ON/OFF")
 
+// Extended Range toggles (default OFF)
+showExtUp      = input.bool(false, "Extend Range Up")
+showExtUpMid   = input.bool(false, "Range Up Mid Line")
+showExtDown    = input.bool(false, "Extend Range Down")
+showExtDownMid = input.bool(false, "Range Dow Mid Line")
+
 //==================== TIME & SYMBOL CHECKS ====================
 dhakaHour   = hour(time, "Asia/Dhaka")
 dhakaMinute = minute(time, "Asia/Dhaka")
 
-targetHour  = useDST ? 6 : 7
+targetHour   = useDST ? 6 : 7
 isTargetTime = (dhakaHour == targetHour and dhakaMinute == 0)
 
 isGoldChart = syminfo.ticker == "XAUUSD" or syminfo.ticker == "GOLD" or str.contains(syminfo.ticker, "XAU")
@@ -25,11 +31,16 @@ var float rangUp = na
 var float rangDown = na
 var box   myBox = na
 var box   innerBox = na
+var box   extUpBox = na
+var box   extDownBox = na
+var line  extUpMidLine = na
+var line  extDownMidLine = na
 var int   startBarIndex = na
 
-// Only execute on allowed TF at target time on a gold symbol
-isAllowedTF = (timeframe.period == "3" or timeframe.period == "5" or timeframe.period == "15" or timeframe.period == "30")
+// Allow 5, 15, 30 min
+isAllowedTF = (timeframe.period == "5" or timeframe.period == "15" or timeframe.period == "30")
 
+// Only execute at target time on a gold symbol + allowed TF
 if isGoldChart and isTargetTime and isAllowedTF
     startBarIndex := bar_index
     openingValue  := open
@@ -40,13 +51,33 @@ if isGoldChart and isTargetTime and isAllowedTF
     rangUp   := forUp * forUp
     rangDown := forDown * forDown
 
-    rangeDiff  = rangUp - rangDown
-    level37_5  = rangDown + rangeDiff * 0.375
-    level62_5  = rangDown + rangeDiff * 0.625
+    rangeDiff   = rangUp - rangDown
+    level37_5   = rangDown + rangeDiff * 0.375
+    level62_5   = rangDown + rangeDiff * 0.625
     endBarIndex = startBarIndex + 24
 
-    // Big range box (same as before)
-    myBox := box.new( startBarIndex, rangUp, endBarIndex, rangDown,border_color=color.rgb(0, 128, 255), bgcolor=color.new(#ff9900, 100))
+    // Big Range Box
+    myBox := box.new(startBarIndex, rangUp, endBarIndex, rangDown, border_color=color.rgb(0, 128, 255), bgcolor=color.new(#ff9900, 100))
 
-    // Inner zone box (replaces the 3 lines)
-    innerBox := box.new(startBarIndex, level62_5, endBarIndex,   level37_5, border_color=color.new(#fe0c0c, 70), bgcolor=color.new(#fc7646, 85))
+    // Inner (1/4) Zone Box
+    innerBox := box.new(startBarIndex, level62_5, endBarIndex, level37_5, border_color=color.new(#fe0c0c, 70), bgcolor=color.new(#fc7646, 85))
+
+    // Extended range height = 2x innerBox height
+    innerH = level62_5 - level37_5
+    extH   = innerH * 2.0
+
+    // Extended UP
+    if showExtUp
+        extUpTop = rangUp + extH
+        extUpBox := box.new(startBarIndex, extUpTop, endBarIndex, rangUp, border_color=color.new(#ff042a, 70), bgcolor=color.new(#ff042a, 95))
+        if showExtUpMid
+            extUpMid = rangUp + (extH / 2.0)
+            extUpMidLine := line.new(startBarIndex, extUpMid, endBarIndex, extUpMid, xloc=xloc.bar_index, extend=extend.none, color=color.new(#ff042a, 10), width=1)
+
+    // Extended DOWN
+    if showExtDown
+        extDownBot = rangDown - extH
+        extDownBox := box.new(startBarIndex, rangDown, endBarIndex, extDownBot, border_color=color.new(#0d821a, 70), bgcolor=color.new(#0d821a, 95))
+        if showExtDownMid
+            extDownMid = rangDown - (extH / 2.0)
+            extDownMidLine := line.new(startBarIndex, extDownMid, endBarIndex, extDownMid, xloc=xloc.bar_index, extend=extend.none, color=color.new(#0d821a, 10), width=1)
