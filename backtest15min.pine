@@ -1,0 +1,101 @@
+//@version=5
+strategy("Gold label strategy by @imriazul (15m Backtest)", overlay=true, pyramiding=0, commission_type=strategy.commission.percent, commission_value=0)
+
+//==================== SETTINGS ====================
+useDST = input.bool(true, "DST", tooltip="Daylight Saving Time ON/OFF")
+
+tpMode = input.string(defval="Base TP (Mid)", title="Take Profit Mode", options=["Base TP (Mid)", "Full TP (Top/Bottom)"], tooltip="Base uses extUpMid/extDownMid. Full uses extUpTop/extDownBot.")
+
+//==================== TIME & SYMBOL CHECKS ====================
+dhakaHour   = hour(time, "Asia/Dhaka")
+dhakaMinute = minute(time, "Asia/Dhaka")
+
+// Range anchor candle (same concept as your indicator)
+targetHour   = useDST ? 6 : 7
+isTargetTime = (dhakaHour == targetHour and dhakaMinute == 0)
+
+// Entry window: 6:00 to 8:00 Dhaka (inclusive of 8:00)
+dhakaMins   = dhakaHour * 60 + dhakaMinute
+inEntryTime = (dhakaMins >= 6 * 60) and (dhakaMins <= 8 * 60)
+
+isGoldChart = syminfo.ticker == "XAUUSD" or syminfo.ticker == "GOLD" or str.contains(syminfo.ticker, "XAU")
+
+// Must be 15m for this version
+is15m = (timeframe.period == "15")
+
+//==================== EMAs ====================
+ema9  = ta.ema(close, 9)
+ema15 = ta.ema(close, 15)
+plot(ema9,  title="EMA 9",  color=color.orange, linewidth=1)
+plot(ema15, title="EMA 15", color=color.blue,   linewidth=1)
+
+//==================== RANGE + LEVEL VARS ====================
+var float openingValue = na
+var float rangUp       = na
+var float rangDown     = na
+var float level37_5    = na
+var float level62_5    = na
+
+var float extUpTop     = na
+var float extUpMid     = na
+var float extDownMid   = na
+var float extDownBot   = na
+
+// One-trade-per-day control (Dhaka day)
+var bool tradedToday = false
+newDhakaDay = ta.change(time("D", "Asia/Dhaka"))
+if newDhakaDay
+    tradedToday := false
+
+//==================== BUILD RANGE ON TARGET CANDLE ====================
+if isGoldChart and is15m and isTargetTime
+    openingValue := open
+
+    sqrtVal  = math.sqrt(openingValue)
+    forUp    = sqrtVal + 0.105
+    forDown  = sqrtVal - 0.105
+    rangUp   := forUp * forUp
+    rangDown := forDown * forDown
+
+    rangeDiff = rangUp - rangDown
+    level37_5 := rangDown + rangeDiff * 0.375
+    level62_5 := rangDown + rangeDiff * 0.625
+
+    // Inner box height and extended targets (same as your ext boxes)
+    innerH = level62_5 - level37_5
+    extH   = innerH * 2.0
+
+    extUpTop   := rangUp + extH
+    extUpMid   := rangUp + (extH / 2.0)
+
+    extDownBot := rangDown - extH
+    extDownMid := rangDown - (extH / 2.0)
+
+//==================== PICK TP BASED ON USER MODE ====================
+levelsReady = not na(level37_5) and not na(level62_5) and not na(extUpMid) and not na(extDownMid) and not na(extUpTop) and not na(extDownBot)
+
+buyTP  = tpMode == "Full TP (Top/Bottom)" ? extUpTop   : extUpMid
+sellTP = tpMode == "Full TP (Top/Bottom)" ? extDownBot : extDownMid
+
+//==================== ENTRY CONDITIONS (15m candle CLOSE) ====================
+buyCond  = isGoldChart and is15m and inEntryTime and levelsReady and not tradedToday and strategy.position_size == 0 and close > level62_5
+sellCond = isGoldChart and is15m and inEntryTime and levelsReady and not tradedToday and strategy.position_size == 0 and close < level37_5
+
+//==================== ORDERS ====================
+if buyCond
+    strategy.entry("BUY", strategy.long)
+    strategy.exit("BUY-EXIT", "BUY", stop=level37_5, limit=buyTP)
+    tradedToday := true
+
+if sellCond
+    strategy.entry("SELL", strategy.short)
+    strategy.exit("SELL-EXIT", "SELL", stop=level62_5, limit=sellTP)
+    tradedToday := true
+
+//==================== OPTIONAL: PLOT LEVELS ====================
+plot(level37_5, "Level 37.5%", color=color.new(color.red, 0), linewidth=1, style=plot.style_linebr)
+plot(level62_5, "Level 62.5%", color=color.new(color.green, 0), linewidth=1, style=plot.style_linebr)
+plot(extUpMid,   "Ext Up Mid (Base TP)",   color=color.new(color.fuchsia, 0), linewidth=1, style=plot.style_linebr)
+plot(extUpTop,   "Ext Up Top (Full TP)",   color=color.new(color.purple,  0), linewidth=1, style=plot.style_linebr)
+plot(extDownMid, "Ext Down Mid (Base TP)", color=color.new(color.aqua,    0), linewidth=1, style=plot.style_linebr)
+plot(extDownBot, "Ext Down Bot (Full TP)", color=color.new(color.teal,    0), linewidth=1, style=plot.style_linebr)

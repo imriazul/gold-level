@@ -1,0 +1,141 @@
+//@version=5
+strategy("Gold label strategy by @imriazul (15m Pullback LIMIT • HARD 1 trade/day)", overlay=true, pyramiding=0, calc_on_every_tick=true)
+
+//==================== SETTINGS ====================
+useDST = input.bool(true, "DST")
+tpMode = input.string(defval="Base TP (Mid)", title="Take Profit Mode", options=["Base TP (Mid)", "Full TP (Top/Bottom)"], tooltip="Base uses extUpMid/extDownMid. Full uses extUpTop/extDownBot.")
+
+//==================== TIME ====================
+dhakaHour   = hour(time, "Asia/Dhaka")
+dhakaMinute = minute(time, "Asia/Dhaka")
+
+targetHour   = useDST ? 6 : 7
+isTargetTime = (dhakaHour == targetHour and dhakaMinute == 0)
+
+dhakaMins   = dhakaHour * 60 + dhakaMinute
+inEntryTime = (dhakaMins >= 360) and (dhakaMins <= 480)  // 6:00–8:00 inclusive
+
+is15m  = timeframe.period == "15"
+isGold = syminfo.ticker == "XAUUSD" or syminfo.ticker == "GOLD" or str.contains(syminfo.ticker, "XAU")
+
+//==================== RANGE ====================
+var float rangUp      = na
+var float rangDown    = na
+var float level37_5   = na
+var float level62_5   = na
+var float extUpTop    = na
+var float extUpMid    = na
+var float extDownBot  = na
+var float extDownMid  = na
+
+if isGold and is15m and isTargetTime
+    sqrtVal   = math.sqrt(open)
+    rangUp    := math.pow(sqrtVal + 0.105, 2)
+    rangDown  := math.pow(sqrtVal - 0.105, 2)
+
+    diff      = rangUp - rangDown
+    level37_5 := rangDown + diff * 0.375
+    level62_5 := rangDown + diff * 0.625
+
+    innerH    = level62_5 - level37_5
+    extH      = innerH * 2.0
+
+    extUpTop    := rangUp + extH
+    extUpMid    := rangUp + (extH / 2.0)
+    extDownBot  := rangDown - extH
+    extDownMid  := rangDown - (extH / 2.0)
+
+levelsReady = not na(level37_5) and not na(level62_5) and not na(extUpMid) and not na(extDownMid) and not na(extUpTop) and not na(extDownBot)
+
+// TP selection
+buyTP  = tpMode == "Full TP (Top/Bottom)" ? extUpTop   : extUpMid
+sellTP = tpMode == "Full TP (Top/Bottom)" ? extDownBot : extDownMid
+
+//==================== HARD 1 TRADE PER DAY (Dhaka) ====================
+var bool dayLocked    = false   // locked after first breakout
+var bool tradeDone    = false   // becomes true after first fill OR first close
+var bool waitingBuy   = false
+var bool waitingSell  = false
+var bool orderPlaced  = false
+
+// track trade count changes
+opentrades_chg  = ta.change(strategy.opentrades)
+closedtrades_chg= ta.change(strategy.closedtrades)
+
+// New Dhaka day reset
+if ta.change(time("D", "Asia/Dhaka"))
+    dayLocked   := false
+    tradeDone   := false
+    waitingBuy  := false
+    waitingSell := false
+    orderPlaced := false
+    strategy.cancel("BUY-LIMIT")
+    strategy.cancel("SELL-LIMIT")
+
+// Also reset at new range anchor candle (safe)
+if isGold and is15m and isTargetTime
+    dayLocked   := false
+    tradeDone   := false
+    waitingBuy  := false
+    waitingSell := false
+    orderPlaced := false
+    strategy.cancel("BUY-LIMIT")
+    strategy.cancel("SELL-LIMIT")
+
+// If a trade opens OR a trade closes, mark done for the day (handles same-bar fills/exits)
+if (opentrades_chg > 0) or (closedtrades_chg > 0)
+    tradeDone   := true
+    waitingBuy  := false
+    waitingSell := false
+    orderPlaced := false
+    strategy.cancel("BUY-LIMIT")
+    strategy.cancel("SELL-LIMIT")
+
+// If entry window ends, cancel any pending order and stop for the day (no late fills)
+if not inEntryTime
+    waitingBuy  := false
+    waitingSell := false
+    orderPlaced := false
+    strategy.cancel("BUY-LIMIT")
+    strategy.cancel("SELL-LIMIT")
+
+//==================== 1) BREAKOUT CONFIRMATION (15m CLOSE) ====================
+canDetectBreakout = isGold and is15m and levelsReady and inEntryTime and not dayLocked and not tradeDone and strategy.position_size == 0
+
+if canDetectBreakout
+    // Breakout BUY side
+    if close > level62_5
+        dayLocked   := true
+        waitingBuy  := true
+        waitingSell := false
+        orderPlaced := false
+        strategy.cancel("SELL-LIMIT")
+
+    // Breakout SELL side
+    else if close < level37_5
+        dayLocked   := true
+        waitingSell := true
+        waitingBuy  := false
+        orderPlaced := false
+        strategy.cancel("BUY-LIMIT")
+
+//==================== 2) PLACE LIMIT ONLY ONCE ====================
+canPlace = isGold and is15m and levelsReady and inEntryTime and dayLocked and not tradeDone and strategy.position_size == 0
+
+if canPlace and waitingBuy and not orderPlaced
+    strategy.entry("BUY-LIMIT", strategy.long, limit=level62_5)
+    strategy.exit("BUY-EXIT", "BUY-LIMIT", stop=level37_5, limit=buyTP)
+    orderPlaced := true
+
+if canPlace and waitingSell and not orderPlaced
+    strategy.entry("SELL-LIMIT", strategy.short, limit=level37_5)
+    strategy.exit("SELL-EXIT", "SELL-LIMIT", stop=level62_5, limit=sellTP)
+    orderPlaced := true
+
+//==================== VISUAL ====================
+plot(level62_5, "Level 62.5%", color=color.new(color.green, 0))
+plot(level37_5, "Level 37.5%", color=color.new(color.red, 0))
+plot(extUpMid, "Ext Up Mid (Base)", color=color.new(color.purple, 0))
+plot(extUpTop, "Ext Up Top (Full)", color=color.new(color.purple, 40))
+plot(extDownMid, "Ext Down Mid (Base)", color=color.new(color.teal, 0))
+plot(extDownBot, "Ext Down Bot (Full)", color=color.new(color.teal, 40))
