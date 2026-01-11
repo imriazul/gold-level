@@ -3,7 +3,14 @@ strategy("Gold label strategy by @imriazul (15m Pullback LIMIT • HARD 1 trade/
 
 //==================== SETTINGS ====================
 useDST = input.bool(true, "DST")
-tpMode = input.string(defval="Base TP (Mid)", title="Take Profit Mode", options=["Base TP (Mid)", "Full TP (Top/Bottom)"], tooltip="Base uses extUpMid/extDownMid. Full uses extUpTop/extDownBot.")
+tpMode = input.string(defval="Base TP (Mid)", title="Take Profit Mode",
+     options=["Base TP (Mid)", "Full TP (Top/Bottom)"],
+     tooltip="Base uses extUpMid/extDownMid. Full uses extUpTop/extDownBot.")
+
+//==================== FORCED EXIT (Extension TP) ====================
+useForcedExit = input.bool(true, "Forced Exit (Extension TP)")
+forceExitHour = input.int(7, "Force Exit Hour (Dhaka)", minval=0, maxval=23)
+forceExitMin  = input.int(30,  "Force Exit Minute (Dhaka)", minval=0, maxval=59)
 
 //==================== TIME ====================
 dhakaHour   = hour(time, "Asia/Dhaka")
@@ -13,6 +20,7 @@ targetHour   = useDST ? 6 : 7
 isTargetTime = (dhakaHour == targetHour and dhakaMinute == 0)
 
 dhakaMins   = dhakaHour * 60 + dhakaMinute
+// Keep your original window logic (6:00–8:00) as-is
 inEntryTime = (dhakaMins >= 360) and (dhakaMins <= 480)  // 6:00–8:00 inclusive
 
 is15m  = timeframe.period == "15"
@@ -48,7 +56,7 @@ if isGold and is15m and isTargetTime
 levelsReady = not na(level37_5) and not na(level62_5) and not na(extUpMid) and not na(extDownMid) and not na(extUpTop) and not na(extDownBot)
 
 // TP selection
-buyTP  = tpMode == "Full TP (Top/Bottom)" ? extUpTop   : extUpMid
+buyTP  = tpMode == "Full TP (Top/Bottom)" ? extUpTop    : extUpMid
 sellTP = tpMode == "Full TP (Top/Bottom)" ? extDownBot : extDownMid
 
 //==================== HARD 1 TRADE PER DAY (Dhaka) ====================
@@ -58,27 +66,52 @@ var bool waitingBuy   = false
 var bool waitingSell  = false
 var bool orderPlaced  = false
 
+// Forced-exit once-per-day guard
+var bool forcedExitDone = false
+
 // track trade count changes
-opentrades_chg  = ta.change(strategy.opentrades)
-closedtrades_chg= ta.change(strategy.closedtrades)
+opentrades_chg   = ta.change(strategy.opentrades)
+closedtrades_chg = ta.change(strategy.closedtrades)
 
 // New Dhaka day reset
 if ta.change(time("D", "Asia/Dhaka"))
-    dayLocked   := false
-    tradeDone   := false
-    waitingBuy  := false
-    waitingSell := false
-    orderPlaced := false
+    dayLocked       := false
+    tradeDone       := false
+    waitingBuy      := false
+    waitingSell     := false
+    orderPlaced     := false
+    forcedExitDone  := false
     strategy.cancel("BUY-LIMIT")
     strategy.cancel("SELL-LIMIT")
 
 // Also reset at new range anchor candle (safe)
 if isGold and is15m and isTargetTime
-    dayLocked   := false
-    tradeDone   := false
-    waitingBuy  := false
-    waitingSell := false
-    orderPlaced := false
+    dayLocked       := false
+    tradeDone       := false
+    waitingBuy      := false
+    waitingSell     := false
+    orderPlaced     := false
+    forcedExitDone  := false
+    strategy.cancel("BUY-LIMIT")
+    strategy.cancel("SELL-LIMIT")
+
+//==================== FORCED EXIT TIME (Extension TP) ====================
+isForceExitTime = (dhakaHour == forceExitHour and dhakaMinute == forceExitMin)
+// This script only has Base/Full, both are extension-based; kept for readability
+isExtensionMode = true
+
+if useForcedExit and isExtensionMode and isGold and is15m and isForceExitTime and not forcedExitDone
+    forcedExitDone := true
+
+    // Close any open position at the selected time
+    if strategy.position_size != 0
+        strategy.close_all(comment="FORCED EXIT TIME")
+        tradeDone   := true
+        waitingBuy  := false
+        waitingSell := false
+        orderPlaced := false
+
+    // Cancel any pending orders too (safe)
     strategy.cancel("BUY-LIMIT")
     strategy.cancel("SELL-LIMIT")
 
@@ -119,7 +152,7 @@ if canDetectBreakout
         orderPlaced := false
         strategy.cancel("BUY-LIMIT")
 
-//==================== 2) PLACE LIMIT ONLY ONCE ====================
+//==================== PLACE LIMIT ONLY ONCE ====================
 canPlace = isGold and is15m and levelsReady and inEntryTime and dayLocked and not tradeDone and strategy.position_size == 0
 
 if canPlace and waitingBuy and not orderPlaced
