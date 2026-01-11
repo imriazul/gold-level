@@ -12,6 +12,11 @@ slMode = input.string(defval="Regular SL", title="Stop Loss Mode",
      options=["Regular SL", "Tied SL (6:00/7:00 open)"],
      tooltip="Regular SL: opposite inner level (buy->37.5%, sell->62.5%). Tied SL: anchor 5m candle open price.")
 
+//==================== FORCED EXIT (Extension modes only) ====================
+useForcedExit = input.bool(true, "Forced Exit (Extension TP only)")
+forceExitHour = input.int(20, "Force Exit Hour (Dhaka)", minval=0, maxval=23)
+forceExitMin  = input.int(0,  "Force Exit Minute (Dhaka)", minval=0, maxval=59)
+
 //==================== TIME ====================
 dhakaHour   = hour(time, "Asia/Dhaka")
 dhakaMinute = minute(time, "Asia/Dhaka")
@@ -70,7 +75,7 @@ sellTP = tpMode == "Full TP (Top/Bottom)" ? extDownBot :
          tpMode == "Range TP (rangUp/rangDown)" ? rangDown :
          extDownMid
 
-//==================== SL selection (NEW) ====================
+//==================== SL selection ====================
 // Regular: buy SL = level37_5, sell SL = level62_5
 // Tied: both sides SL = anchorOpen (6:00/7:00 5m candle open)
 buySL  = slMode == "Tied SL (6:00/7:00 open)" ? anchorOpen : level37_5
@@ -86,23 +91,46 @@ var bool orderPlaced  = false
 opentrades_chg   = ta.change(strategy.opentrades)
 closedtrades_chg = ta.change(strategy.closedtrades)
 
+//==================== FORCED EXIT TIME (Extension TP only) ====================
+var bool forcedExitDone = false
+isExtensionMode = (tpMode != "Range TP (rangUp/rangDown)")
+isForceExitTime = (dhakaHour == forceExitHour and dhakaMinute == forceExitMin)
+
 // New Dhaka day reset
 if ta.change(time("D", "Asia/Dhaka"))
-    dayLocked   := false
-    tradeDone   := false
-    waitingBuy  := false
-    waitingSell := false
-    orderPlaced := false
+    dayLocked       := false
+    tradeDone       := false
+    waitingBuy      := false
+    waitingSell     := false
+    orderPlaced     := false
+    forcedExitDone  := false
     strategy.cancel("BUY-LIMIT")
     strategy.cancel("SELL-LIMIT")
 
 // Also reset at new range anchor candle (safe)
 if isGold and is5m and isTargetTime
-    dayLocked   := false
-    tradeDone   := false
-    waitingBuy  := false
-    waitingSell := false
-    orderPlaced := false
+    dayLocked       := false
+    tradeDone       := false
+    waitingBuy      := false
+    waitingSell     := false
+    orderPlaced     := false
+    forcedExitDone  := false
+    strategy.cancel("BUY-LIMIT")
+    strategy.cancel("SELL-LIMIT")
+
+// Force close open trade + cancel orders once per day at selected time (Extension TP only)
+if useForcedExit and isExtensionMode and isGold and is5m and isForceExitTime and not forcedExitDone
+    forcedExitDone := true
+
+    // Close any open position immediately
+    if strategy.position_size != 0
+        strategy.close_all(comment="FORCED EXIT TIME")
+        tradeDone   := true
+        waitingBuy  := false
+        waitingSell := false
+        orderPlaced := false
+
+    // Cancel any pending orders too (safe)
     strategy.cancel("BUY-LIMIT")
     strategy.cancel("SELL-LIMIT")
 
