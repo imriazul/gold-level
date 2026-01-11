@@ -8,6 +8,11 @@ tpMode = input.string("Base TP (Mid)", "Take Profit Mode",
      options=["Base TP (Mid)", "Full TP (Top/Bottom)"],
      tooltip="Base uses extUpMid/extDownMid. Full uses extUpTop/extDownBot.")
 
+//==================== FORCED EXIT (Extension modes) ====================
+useForcedExit = input.bool(true, "Forced Exit (Extension TP)")
+forceExitHour = input.int(20, "Force Exit Hour (Dhaka)", minval=0, maxval=23)
+forceExitMin  = input.int(0,  "Force Exit Minute (Dhaka)", minval=0, maxval=59)
+
 //==================== TIME & SYMBOL CHECKS ====================
 dhakaHour   = hour(time, "Asia/Dhaka")
 dhakaMinute = minute(time, "Asia/Dhaka")
@@ -15,9 +20,11 @@ dhakaMinute = minute(time, "Asia/Dhaka")
 targetHour   = useDST ? 6 : 7
 isTargetTime = (dhakaHour == targetHour and dhakaMinute == 0)
 
-// Entry window: 6:00 to 8:00 Dhaka (inclusive of 8:00)
-dhakaMins   = dhakaHour * 60 + dhakaMinute
-inEntryTime = (dhakaMins >= 6 * 60) and (dhakaMins <= 8 * 60)
+// Entry window: 2 hours from anchor time (inclusive)
+dhakaMins    = dhakaHour * 60 + dhakaMinute
+entryStart   = targetHour * 60
+entryEnd     = entryStart + 120
+inEntryTime  = (dhakaMins >= entryStart) and (dhakaMins <= entryEnd)
 
 isGoldChart = syminfo.ticker == "XAUUSD" or syminfo.ticker == "GOLD" or str.contains(syminfo.ticker, "XAU")
 is5m        = (timeframe.period == "5")
@@ -43,8 +50,13 @@ var float extDownBot   = na
 // One-trade-per-day control (Dhaka day)
 var bool tradedToday = false
 newDhakaDay = ta.change(time("D", "Asia/Dhaka"))
+
+// Forced-exit once-per-day guard
+var bool forcedExitDone = false
+
 if newDhakaDay
-    tradedToday := false
+    tradedToday     := false
+    forcedExitDone  := false
 
 //==================== BUILD RANGE ON TARGET CANDLE ====================
 if isGoldChart and is5m and isTargetTime
@@ -75,8 +87,27 @@ if isGoldChart and is5m and isTargetTime
 //==================== PICK TP BASED ON USER MODE ====================
 levelsReady = not na(level37_5) and not na(level62_5) and not na(extUpMid) and not na(extDownMid) and not na(extUpTop) and not na(extDownBot)
 
-buyTP  = tpMode == "Full TP (Top/Bottom)" ? extUpTop   : extUpMid
+buyTP  = tpMode == "Full TP (Top/Bottom)" ? extUpTop    : extUpMid
 sellTP = tpMode == "Full TP (Top/Bottom)" ? extDownBot : extDownMid
+
+//==================== FORCED EXIT TIME (Extension TP) ====================
+isForceExitTime = (dhakaHour == forceExitHour and dhakaMinute == forceExitMin)
+
+// (In this script, both TP modes are extension-based. This flag is kept for consistency.)
+isExtensionMode = true
+
+if useForcedExit and isExtensionMode and isGoldChart and is5m and isForceExitTime and not forcedExitDone
+    forcedExitDone := true
+
+    // Close any open position at the selected time
+    if strategy.position_size != 0
+        strategy.close_all(comment="FORCED EXIT TIME")
+
+    // Optional safety: cancel any resting orders (none in this script, but harmless)
+    strategy.cancel("BUY")
+    strategy.cancel("SELL")
+    strategy.cancel("BUY-EXIT")
+    strategy.cancel("SELL-EXIT")
 
 //==================== ENTRY CONDITIONS ====================
 buyCond  = isGoldChart and is5m and inEntryTime and levelsReady and not tradedToday and strategy.position_size == 0 and close > level62_5
