@@ -1,0 +1,96 @@
+//@version=5
+indicator("Gold label indicator by @imriazul", overlay=true)
+
+//==================== SETTINGS ====================
+useDST = input.bool(true, "DST", tooltip="Daylight Saving Time ON/OFF")
+
+tpMode = input.string("Base TP (Mid)", "Take Profit Mode",
+     options=["Base TP (Mid)", "Full TP (Top/Bottom)"],
+     tooltip="Set according to GRSN Value")
+     
+sqrtOffset = input.float(0.105, "GRSN Value", step=0.001, minval=0.0,
+     tooltip="For best Result, Ask strategy builder")
+
+//==================== TIME & SYMBOL CHECKS ====================
+dhakaHour   = hour(time, "Asia/Dhaka")
+dhakaMinute = minute(time, "Asia/Dhaka")
+
+targetHour   = useDST ? 6 : 7
+isTargetTime = (dhakaHour == targetHour and dhakaMinute == 0)
+
+// Entry window: 2 hours from anchor time (inclusive)
+dhakaMins    = dhakaHour * 60 + dhakaMinute
+entryStart   = targetHour * 60
+entryEnd     = entryStart + 120
+inEntryTime  = (dhakaMins >= entryStart) and (dhakaMins <= entryEnd)
+
+isGoldChart = syminfo.ticker == "XAUUSD" or syminfo.ticker == "GOLD" or str.contains(syminfo.ticker, "XAU")
+is5m        = (timeframe.period == "5")
+
+//==================== EMAs ====================
+ema9   = ta.ema(close, 9)
+ema15  = ta.ema(close, 15)
+ema50  = ta.ema(close, 50)
+ema100 = ta.ema(close, 100)
+ema200 = ta.ema(close, 200)
+
+plot(ema9,   title="EMA 9",   color=color.blue,   linewidth=1)
+plot(ema15,  title="EMA 15",  color=color.blue,   linewidth=1)
+plot(ema50,  title="EMA 50",  color=color.orange, linewidth=1)
+plot(ema100, title="EMA 100", color=color.green,  linewidth=1)
+plot(ema200, title="EMA 200", color=color.red,    linewidth=1)
+
+//==================== RANGE + LEVEL VARS ====================
+var float openingValue = na
+var float rangUp       = na
+var float rangDown     = na
+var float level37_5    = na
+var float level62_5    = na
+
+var float extUpTop     = na
+var float extUpMid     = na
+var float extDownMid   = na
+var float extDownBot   = na
+
+newDhakaDay = ta.change(time("D", "Asia/Dhaka"))
+
+// Marker guard (once-per-day)
+var bool forcedExitDone = false
+if newDhakaDay
+    forcedExitDone := false
+
+//==================== BUILD RANGE ON TARGET CANDLE ====================
+if isGoldChart and is5m and isTargetTime
+    openingValue := open
+
+    sqrtVal  = math.sqrt(openingValue)
+    forUp    = sqrtVal + sqrtOffset
+    forDown  = sqrtVal - sqrtOffset
+    rangUp   := forUp * forUp
+    rangDown := forDown * forDown
+
+    rangeDiff = rangUp - rangDown
+    level37_5 := rangDown + rangeDiff * 0.375
+    level62_5 := rangDown + rangeDiff * 0.625
+
+    // Inner box height and extended targets
+    innerH = level62_5 - level37_5
+    extH   = innerH * 2.0
+
+    // Extended UP: rangUp -> extUpTop
+    extUpTop := rangUp + extH
+    extUpMid := rangUp + (extH / 2.0)
+
+    // Extended DOWN: extDownBot -> rangDown
+    extDownBot := rangDown - extH
+    extDownMid := rangDown - (extH / 2.0)
+    
+//==================== OPTIONAL: PLOT LEVELS ====================
+plot(level37_5, "Level 37.5%", color=color.new(color.red, 0), linewidth=1, style=plot.style_linebr)
+plot(level62_5, "Level 62.5%", color=color.new(color.green, 0), linewidth=1, style=plot.style_linebr)
+
+plot(extUpMid,   "Ext Up Mid (Base TP)",   color=color.new(color.gray, 10), linewidth=1, style=plot.style_linebr)
+plot(extUpTop,   "Ext Up Top (Full TP)",   color=color.new(color.gray,  20), linewidth=1, style=plot.style_linebr)
+
+plot(extDownMid, "Ext Down Mid (Base TP)", color=color.new(color.gray,    20), linewidth=1, style=plot.style_linebr)
+plot(extDownBot, "Ext Down Bot (Full TP)", color=color.new(color.gray, 10), linewidth=1, style=plot.style_linebr)
