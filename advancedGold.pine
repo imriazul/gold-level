@@ -2,10 +2,10 @@
 indicator("Gold label indicator by @imriazul", overlay=true)
 
 //==================== SETTINGS ====================
-useDST = input.bool(true, "DST", tooltip="Daylight Saving Time ON/OFF")
+useDST        = input.bool(true, "DST", tooltip="Daylight Saving Time ON/OFF")
 showBoxSystem = input.bool(true, "Show Box System")
 keepBoxes     = input.int(7, "Keep last N days boxes", minval=1, maxval=300)
-sqrtOffset = input.float(0.105, "GRSN Value", step=0.001, minval=0.0, tooltip="For best Result, Ask strategy builder")
+sqrtOffset    = input.float(0.105, "GRSN Value", step=0.001, minval=0.0, tooltip="For best Result, Ask strategy builder")
 
 boxBorderCol  = input.color(color.rgb(0, 128, 255), "Box Border Color")
 boxFillCol    = input.color(color.new(#ff9900, 100), "Box Fill Color")
@@ -43,10 +43,13 @@ var float rangDown     = na
 var float level37_5    = na
 var float level62_5    = na
 
-var float extUpTop     = na
+// Keep ONLY mid extensions (per your request)
 var float extUpMid     = na
 var float extDownMid   = na
-var float extDownBot   = na
+
+// NEW HIGH / NEW LOW
+var float newHigh      = na
+var float newLow       = na
 
 //==================== BOX OBJECT STORAGE (KEEP HISTORY) ====================
 var box[]  boxes = array.new_box()
@@ -87,17 +90,23 @@ if isGoldChart and isTargetTime and (timeframe.period == "3" or timeframe.period
     innerH = level62_5 - level37_5
     extH   = innerH * 2.0
 
-    extUpTop   := rangUp + extH
+    // Keep ONLY these two (unchanged logic)
     extUpMid   := rangUp + (extH / 2.0)
-    extDownBot := rangDown - extH
     extDownMid := rangDown - (extH / 2.0)
+
+    //==================== NEW HIGH / NEW LOW (Requested) ====================
+    newHighDist = rangUp - level37_5
+    newHigh     := rangUp + newHighDist
+
+    newLowDist  = level62_5 - rangDown
+    newLow      := rangDown - newLowDist
 
     if showBoxSystem
         endTs    = f_endTs_8am_dhaka(time)
         midPrice = (rangUp + rangDown) / 2.0
 
-        b  = box.new(time, rangUp, endTs, rangDown, xloc=xloc.bar_time, border_color=boxBorderCol, bgcolor=boxFillCol)
-        lm = line.new(time, midPrice, endTs, midPrice, xloc=xloc.bar_time, color=midCol, width=1)
+        b   = box.new(time, rangUp, endTs, rangDown, xloc=xloc.bar_time, border_color=boxBorderCol, bgcolor=boxFillCol)
+        lm  = line.new(time, midPrice, endTs, midPrice, xloc=xloc.bar_time, color=midCol, width=1)
         l37 = line.new(time, level37_5, endTs, level37_5, xloc=xloc.bar_time, color=col37, width=1)
         l62 = line.new(time, level62_5, endTs, level62_5, xloc=xloc.bar_time, color=col62, width=1)
 
@@ -111,7 +120,10 @@ if isGoldChart and isTargetTime and (timeframe.period == "3" or timeframe.period
 plot(level37_5, "Level 37.5%", color=color.new(#f805ec, 0), linewidth=1, style=plot.style_linebr)
 plot(level62_5, "Level 62.5%", color=color.new(#f805ec, 0), linewidth=1, style=plot.style_linebr)
 
+// Keep ONLY mid extensions plots
 plot(extUpMid,   "Ext Up Mid (Base TP)",   color=color.new(color.gray, 10), linewidth=1, style=plot.style_linebr)
-plot(extUpTop,   "Ext Up Top (Full TP)",   color=color.new(color.gray, 20), linewidth=1, style=plot.style_linebr)
 plot(extDownMid, "Ext Down Mid (Base TP)", color=color.new(color.gray, 20), linewidth=1, style=plot.style_linebr)
-plot(extDownBot, "Ext Down Bot (Full TP)", color=color.new(color.gray, 10), linewidth=1, style=plot.style_linebr)
+
+// NEW HIGH / NEW LOW plots
+plot(newHigh, "New High", color=color.new(color.gray, 10), linewidth=1, style=plot.style_linebr)
+plot(newLow,  "New Low",  color=color.new(color.gray, 10), linewidth=1, style=plot.style_linebr)
